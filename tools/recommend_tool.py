@@ -11,6 +11,8 @@ from sklearn.preprocessing import MultiLabelBinarizer
 # Define CTRMLP again
 import torch.nn as nn
 
+from rec_explainer import generate_explanation
+
 class CTRMLP(nn.Module):
     def __init__(self, input_dim):
         super().__init__()
@@ -55,6 +57,10 @@ def binarize_tags(tag_list):
     return vec
 
 def recommend_videos(user_tags: list[str], k: int = 5) -> list[dict]:
+    print("🧪 recommend_videos 被调用！参数：", user_tags)
+    if not user_tags:
+        return []
+
     """LLM-compatible tool: Recommend videos based on user tags (keywords)"""
     user_vec = binarize_tags(user_tags)
     query_text = " ".join(user_tags)
@@ -74,11 +80,20 @@ def recommend_videos(user_tags: list[str], k: int = 5) -> list[dict]:
     sorted_df = candidate_df.sort_values(by="score", ascending=False).head(k)
 
     results = []
+
+    # 推荐的视频信息 + 推荐理由
     for _, row in sorted_df.iterrows():
+        explanation = generate_explanation(
+            user_tags=user_tags,
+            video_tags=row["tags"],
+            score=row["score"],
+            title=row["title"]
+        )
+
         results.append({
             "video_id": row["video_id"],
             "title": row["title"],
             "score": round(row["score"], 4),
-            "tags": row["tags"]
+            "tags": row["tags"],
+            "reason": explanation  # 💬 推荐理由字段
         })
-    return results

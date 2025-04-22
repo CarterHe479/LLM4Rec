@@ -1,37 +1,58 @@
 # agents/recommender_agent.py
 
-from langchain.agents import initialize_agent, Tool
-from langchain.agents.agent_types import AgentType
-from langchain.chat_models import ChatOpenAI
-from langchain.tools import tool
-from tools.recommend_tool import recommend_videos
-# recommender_agent.py
 import os
 from dotenv import load_dotenv
+load_dotenv(dotenv_path="/Users/carterhe/Desktop/LLM4Rec/.env")
 
-load_dotenv()  # 自动从 .env 加载环境变量
+print("🧪 DEBUG: OPENAI_API_KEY =", os.getenv("OPENAI_API_KEY"))
+print("🧪 DEBUG: OPENAI_API_BASE =", os.getenv("OPENAI_API_BASE"))
+
+from tools.recommend_tool import recommend_videos
+# from langchain_community.chat_models import ChatOpenAI
+# ✅ 正确的写法（支持 openai_api_base）
+from langchain_openai import ChatOpenAI
+from langchain.agents import initialize_agent, Tool
+from langchain.agents.agent_types import AgentType
+from langchain.tools import tool
 
 
-# === 用 LangChain @tool 装饰器注册函数（可选，或者直接用 Tool(...)） ===
 @tool
-def recommend(user_tags: list[str]) -> list[dict]:
-    """推荐视频：根据用户感兴趣的标签列表（如 ['猫', '搞笑']）返回视频推荐列表"""
-    return recommend_videos(user_tags)
+def recommend(user_input: str) -> list[dict]:
+    """推荐视频：接受用户自然语言输入，如“我想看猫猫搞笑视频”，内部解析为关键词。"""
+    tags = user_input.replace("，", ",").replace("、", ",").replace(" ", ",").split(",")
+    tags = [t.strip() for t in tags if t.strip()]
+    print("🧪 提取关键词:", tags)
+    return recommend_videos(tags)
 
-# === 构造 Tool 列表 ===
+
 tools = [
     Tool.from_function(
         func=recommend,
         name="VideoRecommender",
-        description="基于用户兴趣关键词推荐视频，输入为标签列表，例如 ['搞笑', '足球']"
+        description=(
+            "推荐视频工具，输入参数是一个关键词列表，例如 ['猫猫', '搞笑']。\n"
+            "用户会输入自然语言描述兴趣，你应该从中提取关键词，格式化为一个字符串列表。\n"
+            "⚠️ 注意：不要传入字符串，而是 list[str]。\n"
+            "示例：用户说“我想看猫猫搞笑视频” → 输入应为 ['猫猫', '搞笑']"
+        )
     )
 ]
 
-# === 构建 Agent ===
+
+
+print("🧪 LLM initialized with:")
+print("   - API_KEY =", os.getenv("OPENAI_API_KEY"))
+print("   - BASE_URL =", os.getenv("OPENAI_API_BASE"))
+
 llm = ChatOpenAI(
+    model="gpt-3.5-turbo",
     temperature=0,
-    model="mistralai/mistral-7b-instruct",  # 推荐免费模型之一
+    openai_api_key=os.getenv("OPENAI_API_KEY"),
+    openai_api_base=os.getenv("OPENAI_API_BASE")
 )
+
+
+
 agent = initialize_agent(
     tools=tools,
     llm=llm,
@@ -39,6 +60,16 @@ agent = initialize_agent(
     verbose=True
 )
 
-# === 对外暴露 Agent 实例 ===
 def get_recommender_agent():
     return agent
+
+
+if __name__ == "__main__":
+    from langchain_core.messages import HumanMessage
+    print("🔍 Testing LLM directly...")
+
+    try:
+        response = llm.invoke([HumanMessage(content="你是谁？")])
+        print("✅ 模型返回：", response.content)
+    except Exception as e:
+        print("❌ 模型调用失败：", e)
